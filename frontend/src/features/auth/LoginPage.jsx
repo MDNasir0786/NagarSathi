@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
@@ -12,19 +12,37 @@ import {
 } from "lucide-react";
 
 import { useAuthStore } from "../../stores/authStore";
+import { USE_MOCK } from "../../services/apiClient";
 import { Button } from "../../components/ui/Button";
 import { USER_ROLES } from "../../types";
 
 export const LoginPage = () => {
-  const { login } = useAuthStore();
+  const { login, user, role, isAuthenticated, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState("CITIZEN");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState("");
+  const [oauthError, setOauthError] = useState("");
 
   const formRef = useRef(null);
+
+  useEffect(() => {
+    if (USE_MOCK || isLoading || !isAuthenticated || !user) return;
+
+    const destination = {
+      CITIZEN: "/citizen/dashboard",
+      WORKER: "/worker/dashboard",
+      NODAL_OFFICER: "/nodal/dashboard",
+      NGO: "/ngo/dashboard",
+      HIGHER_AUTHORITY: "/authority/dashboard",
+      SUPER_ADMIN: "/admin/dashboard",
+    }[role] || "/citizen/dashboard";
+
+    navigate(destination, { replace: true });
+  }, [isAuthenticated, isLoading, navigate, role, user]);
 
   // =====================================================
   // ROLE CONFIGURATION
@@ -115,6 +133,17 @@ export const LoginPage = () => {
       console.error("Login failed:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOAuthLogin = async (provider) => {
+    try {
+      setOauthError("");
+      setOauthLoading(provider);
+      await useAuthStore.getState().loginWithOAuth(provider);
+    } catch (error) {
+      setOauthError(error.message || "OAuth login failed.");
+      setOauthLoading("");
     }
   };
 
@@ -430,28 +459,42 @@ export const LoginPage = () => {
               Login with
             </p>
 
+            {oauthError && (
+              <p className="text-center text-xs text-red-600 mb-3" role="alert">
+                {oauthError}
+              </p>
+            )}
+
             <div className="grid grid-cols-3 gap-2.5">
               <button
                 type="button"
+                onClick={() => handleOAuthLogin("google")}
+                disabled={Boolean(oauthLoading)}
                 className="h-11 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition"
               >
                 <span className="text-red-500 font-bold">G</span>
-                &nbsp; Google
+                &nbsp; {oauthLoading === "google" ? "Loading..." : "Google"}
               </button>
 
               <button
                 type="button"
+                onClick={() => handleOAuthLogin("facebook")}
+                disabled={Boolean(oauthLoading)}
                 className="h-11 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition"
               >
                 <span className="text-blue-600 font-bold">f</span>
-                &nbsp; Facebook
+                &nbsp; {oauthLoading === "facebook" ? "Loading..." : "Facebook"}
               </button>
 
               <button
                 type="button"
+                onClick={() => handleOAuthLogin("apple")}
+                disabled={Boolean(oauthLoading)}
                 className="h-11 border border-slate-200 rounded-xl text-xs font-semibold hover:bg-slate-50 transition"
               >
-                <span className="font-bold">Apple</span>
+                <span className="font-bold">
+                  {oauthLoading === "apple" ? "Loading..." : "Apple"}
+                </span>
               </button>
             </div>
           </div>

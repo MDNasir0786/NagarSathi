@@ -10,6 +10,8 @@ import {
   ANALYTICS_DATA, 
   INITIAL_AUDIT_LOGS 
 } from './mockData';
+import { apiClient, USE_MOCK } from './apiClient';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 
 // Helper for LocalStorage Persistence in JavaScript
 const getStoredData = (key, initial) => {
@@ -32,12 +34,35 @@ const setStoredData = (key, value) => {
 
 // 1. Auth Service
 export const authService = {
+  async signInWithOAuth(provider) {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error('Supabase is not configured. Add the VITE_SUPABASE variables.');
+    }
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin + '/login' },
+    });
+    if (error) throw error;
+  },
+
+  async signOut() {
+    if (supabase) await supabase.auth.signOut();
+  },
+
   async getCurrentUser(role) {
+    if (!USE_MOCK) {
+      const response = await apiClient.get('/auth/me');
+      return mapProfile(response.profile);
+    }
     await new Promise((resolve) => setTimeout(resolve, 150));
     return MOCK_USERS[role] || MOCK_USERS.CITIZEN;
   },
 
   async login(email, role) {
+    if (!USE_MOCK) {
+      const response = await apiClient.get('/auth/me');
+      return mapProfile(response.profile);
+    }
     await new Promise((resolve) => setTimeout(resolve, 300));
     const user = MOCK_USERS[role] || {
       id: `usr-${Date.now()}`,
@@ -53,6 +78,12 @@ export const authService = {
 // 2. Complaint Service
 export const complaintService = {
   async getComplaints(filter = {}) {
+    if (!USE_MOCK) {
+      const response = await apiClient.get('/complaints', {
+        ...(filter.search ? { search: filter.search } : {}),
+      });
+      return response.items.map(mapComplaint);
+    }
     await new Promise((resolve) => setTimeout(resolve, 200));
     let complaints = getStoredData('complaints', INITIAL_COMPLAINTS);
     
@@ -75,12 +106,29 @@ export const complaintService = {
   },
 
   async getComplaintById(id) {
+    if (!USE_MOCK) {
+      return mapComplaint(await apiClient.get(`/complaints/${id}`));
+    }
     await new Promise((resolve) => setTimeout(resolve, 150));
     const complaints = getStoredData('complaints', INITIAL_COMPLAINTS);
     return complaints.find((c) => c.id === id) || null;
   },
 
   async createComplaint(payload) {
+    if (!USE_MOCK) {
+      const response = await apiClient.post('/complaints', {
+        title: payload.title,
+        description: payload.description,
+        latitude: payload.location?.lat,
+        longitude: payload.location?.lng,
+        address: payload.location?.address,
+        ward: payload.location?.ward,
+        image_url: payload.images?.[0] || null,
+        image_urls: payload.images || [],
+        category_hint: payload.category,
+      });
+      return mapComplaint(response.complaint);
+    }
     await new Promise((resolve) => setTimeout(resolve, 400));
     const complaints = getStoredData('complaints', INITIAL_COMPLAINTS);
     const newId = `SB-2026-${Math.floor(8900 + Math.random() * 900)}`;
@@ -111,6 +159,11 @@ export const complaintService = {
   },
 
   async updateComplaintStatus(id, status, actor, notes = '', extraFields = {}) {
+    if (!USE_MOCK) {
+      return mapComplaint(await apiClient.patch(`/complaints/${id}`, {
+        description: notes || undefined,
+      }));
+    }
     await new Promise((resolve) => setTimeout(resolve, 250));
     const complaints = getStoredData('complaints', INITIAL_COMPLAINTS);
     const index = complaints.findIndex((c) => c.id === id);
@@ -141,6 +194,33 @@ export const complaintService = {
     return updated;
   },
 };
+
+function mapProfile(profile) {
+  return {
+    ...profile,
+    name: profile.full_name || profile.email,
+    role: String(profile.role || 'citizen').toUpperCase(),
+  };
+}
+
+function mapComplaint(complaint) {
+  return {
+    ...complaint,
+    referenceCode: complaint.reference_code,
+    id: complaint.id,
+    createdAt: complaint.created_at,
+    updatedAt: complaint.updated_at,
+    priority: complaint.priority_score >= 80 ? 'CRITICAL' : complaint.priority_score >= 50 ? 'HIGH' : 'MEDIUM',
+    location: {
+      address: complaint.address || 'Bhopal',
+      ward: complaint.ward || 'Unassigned',
+      lat: complaint.latitude,
+      lng: complaint.longitude,
+    },
+    images: complaint.image_urls || (complaint.image_url ? [complaint.image_url] : []),
+    timeline: complaint.timeline || [],
+  };
+}
 
 // 3. Worker & Task Service
 export const taskService = {
