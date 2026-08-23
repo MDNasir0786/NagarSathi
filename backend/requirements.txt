@@ -1,0 +1,23 @@
+# Bhopal CivicAI — backend dependencies
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# ORM + drivers
+SQLAlchemy>=2.0.30
+psycopg[binary]>=3.1.18          # PostgreSQL (Supabase) driver
+
+# Validation / settings
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+email-validator>=2.1.0
+python-dotenv>=1.0.1
+
+# Supabase JWT verification (HS256 secret or ES256/RS256 JWKS)
+PyJWT[crypto]>=2.8.0
+
+# Claude API
+anthropic>=0.40.0
+
+# Used by the JWKS fetcher and the smoke-test script
+httpx>=0.27.0
